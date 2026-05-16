@@ -1,0 +1,87 @@
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: cognitive
+      POSTGRES_PASSWORD: cognitive_password
+      POSTGRES_DB: cognitive_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognitive -d cognitive_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - ENV=production
+      - GATEWAY_WS_URL=ws://backend-gateway:8000/ws/telemetry/
+      - DEMO_GATEWAY_JWT=${DEMO_GATEWAY_JWT:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  backend-gateway:
+    build:
+      context: ./backend-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ML_SERVICE_URL=http://ml-service:8001/api/infer
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgres://cognitive:cognitive_password@db:5432/cognitive_db
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,backend-gateway,[::1]
+      - DJANGO_DEBUG=1
+      - ALLOW_DEV_INSECURE_TELEMETRY=${ALLOW_DEV_INSECURE_TELEMETRY:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_GATEWAY_WS_URL: ${VITE_GATEWAY_WS_URL:-ws://localhost:8000/ws/telemetry/}
+        VITE_ML_BASE_URL: ${VITE_ML_BASE_URL:-http://localhost:8001}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend-gateway
+
+volumes:
+  redis_data:
+  postgres_data:

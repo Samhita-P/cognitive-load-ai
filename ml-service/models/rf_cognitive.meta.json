@@ -1,0 +1,22 @@
+{
+  "model_name": "rf_cognitive",
+  "model_version": "v2_random_forest",
+  "trained_at": "2026-05-14T16:43:27.146900Z",
+  "dataset_rows": 10000,
+  "accuracy": 0.8885,
+  "features": [
+    "idle_ratio",
+    "activity_density",
+    "error_rate",
+    "max_pause_ms",
+    "avg_mouse_variance",
+    "total_keystrokes"
+  ],
+  "classes": [
+    "Distracted",
+    "Fatigued",
+    "Focused",
+    "Normal",
+    "Overloaded"
+  ]
+}
