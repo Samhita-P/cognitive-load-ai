@@ -15,7 +15,7 @@ export const DemoControlPanel: React.FC = () => {
         `${apiUrl("/api/demo/trigger")}?scenario=${encodeURIComponent(scenario)}`,
         {
           method: "POST",
-          credentials: "include",
+          mode: "cors",
           headers: {
             "Content-Type": "application/json",
           },
@@ -23,13 +23,13 @@ export const DemoControlPanel: React.FC = () => {
       );
 
       if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
+        const text = await res.text();
+        throw new Error(`Request failed: ${res.status} - ${text}`);
       }
 
       const data = await res.json();
       console.log("Demo started:", data);
 
-      // Scenario runs for 60 seconds
       setTimeout(() => {
         setIsRunning(false);
         setActiveScenario("");
