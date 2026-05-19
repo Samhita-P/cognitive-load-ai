@@ -136,6 +136,15 @@ class HumanFeedbackSubmitView(APIView):
         )
 
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.conf import settings
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
+
 @api_view(["POST"])
 def trigger_demo(request):
     scenario = request.GET.get("scenario")
@@ -148,6 +157,8 @@ def trigger_demo(request):
 
     ml_url = settings.ML_SERVICE_URL.rstrip("/") + "/api/demo/trigger"
 
+    logger.info(f"Forwarding scenario '{scenario}' to ML service: {ml_url}")
+
     try:
         response = requests.post(
             ml_url,
@@ -155,20 +166,32 @@ def trigger_demo(request):
             timeout=90
         )
 
+        logger.info(f"ML service responded: {response.status_code}")
+        logger.info(f"ML response body: {response.text}")
+
         try:
             data = response.json()
         except Exception:
-            data = {"message": response.text}
+            data = {"raw_response": response.text}
 
         return Response(data, status=response.status_code)
 
     except requests.exceptions.Timeout:
+        logger.error("ML service timeout")
         return Response(
-            {"error": "ML service timeout (likely cold start on Render free tier)"},
+            {"error": "ML service timeout"},
             status=status.HTTP_504_GATEWAY_TIMEOUT
         )
 
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"ML connection error: {str(e)}")
+        return Response(
+            {"error": f"ML connection error: {str(e)}"},
+            status=status.HTTP_502_BAD_GATEWAY
+        )
+
     except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
