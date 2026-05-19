@@ -12,14 +12,13 @@ export const DemoControlPanel: React.FC = () => {
 
     try {
       const res = await fetch(
-        `${apiUrl("/api/demo/trigger")}?scenario=${encodeURIComponent(scenario)}`,
-        {
-          method: "POST",
-          mode: "cors",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+        `${apiUrl("/api/demo/trigger/")}?scenario=${encodeURIComponent(scenario)}`        {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
       );
 
       if (!res.ok) {
