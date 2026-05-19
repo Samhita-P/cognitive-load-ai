@@ -146,13 +146,13 @@ def trigger_demo(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    ml_url = f"{settings.ML_SERVICE_URL}/api/demo/trigger"
+    ml_url = settings.ML_SERVICE_URL.rstrip("/") + "/api/demo/trigger"
 
     try:
         response = requests.post(
             ml_url,
             params={"scenario": scenario},
-            timeout=30
+            timeout=90
         )
 
         try:
@@ -161,6 +161,12 @@ def trigger_demo(request):
             data = {"message": response.text}
 
         return Response(data, status=response.status_code)
+
+    except requests.exceptions.Timeout:
+        return Response(
+            {"error": "ML service timeout (likely cold start on Render free tier)"},
+            status=status.HTTP_504_GATEWAY_TIMEOUT
+        )
 
     except Exception as e:
         return Response(
