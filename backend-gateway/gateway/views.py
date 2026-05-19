@@ -1,17 +1,20 @@
 from django.contrib.auth.models import User
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view
+from rest_framework.throttling import UserRateThrottle
+
+import secrets
+import requests
 
 from .models import CognitivePrediction, CognitiveSession, HumanFeedback
 from .serializers import HumanFeedbackCreateSerializer
-import secrets
-import json
-from django.core.cache import cache
-from rest_framework.throttling import UserRateThrottle
 from .ticket_store import WSTicketStore
+
 
 class WSTicketThrottle(UserRateThrottle):
     scope = 'ws_ticket'
@@ -25,13 +28,14 @@ class UserSerializer(ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
-        return user
+        return User.objects.create_user(**validated_data)
+
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = UserSerializer
+
 
 class WSTicketView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -39,12 +43,19 @@ class WSTicketView(APIView):
 
     def post(self, request):
         ticket = secrets.token_urlsafe(32)
+
         payload = {
             "user_id": request.user.id,
             "purpose": "ws_auth"
         }
+
         WSTicketStore.issue(ticket, payload, ttl=60)
-        return Response({"ticket": ticket}, status=status.HTTP_201_CREATED)
+
+        return Response(
+            {"ticket": ticket},
+            status=status.HTTP_201_CREATED
+        )
+
 
 class HumanFeedbackSubmitView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -54,32 +65,48 @@ class HumanFeedbackSubmitView(APIView):
         ser.is_valid(raise_exception=True)
 
         session = (
-            CognitiveSession.objects.filter(user=request.user, ended_at__isnull=True)
+            CognitiveSession.objects.filter(
+                user=request.user,
+                ended_at__isnull=True
+            )
             .order_by("-started_at")
             .first()
         )
+
         if session is None:
             return Response(
-                {"detail": "No active cognitive session. Open the dashboard and send telemetry first."},
+                {
+                    "detail": "No active cognitive session. Open the dashboard and send telemetry first."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not hasattr(request.user, 'privacy_profile') or not request.user.privacy_profile.telemetry_consent:
+        if (
+            not hasattr(request.user, 'privacy_profile')
+            or not request.user.privacy_profile.telemetry_consent
+        ):
             return Response(
-                {"detail": "Telemetry consent is required to submit feedback."},
+                {
+                    "detail": "Telemetry consent is required to submit feedback."
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         data = ser.validated_data
         prediction = None
         pid = data.get("prediction_id")
+
         if pid is not None:
             prediction = CognitivePrediction.objects.filter(
-                id=pid, session=session
+                id=pid,
+                session=session
             ).first()
+
             if prediction is None:
                 return Response(
-                    {"detail": "prediction_id does not match your active session."},
+                    {
+                        "detail": "prediction_id does not match your active session."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -98,7 +125,45 @@ class HumanFeedbackSubmitView(APIView):
             features_snapshot=data["features_snapshot"],
             feature_schema_version=data.get("feature_schema_version", "v1.0")
         )
+
         return Response(
-            {"status": "ok", "id": fb.id, "prediction_linked": prediction is not None},
+            {
+                "status": "ok",
+                "id": fb.id,
+                "prediction_linked": prediction is not None
+            },
             status=status.HTTP_201_CREATED,
+        )
+
+
+@api_view(["POST"])
+def trigger_demo(request):
+    scenario = request.GET.get("scenario")
+
+    if not scenario:
+        return Response(
+            {"error": "scenario query parameter is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    ml_url = f"{settings.ML_SERVICE_URL}/api/demo/trigger"
+
+    try:
+        response = requests.post(
+            ml_url,
+            params={"scenario": scenario},
+            timeout=30
+        )
+
+        try:
+            data = response.json()
+        except Exception:
+            data = {"message": response.text}
+
+        return Response(data, status=response.status_code)
+
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

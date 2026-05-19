@@ -88,7 +88,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 # FastAPI cognitive inference (used by WebSocket consumer).
 ML_SERVICE_URL = os.environ.get(
     "ML_SERVICE_URL",
-    "http://127.0.0.1:8001/api/infer",
+    "https://cognitive-ai-ml.onrender.com",
 )
 
 # Dev-only: allow WebSocket telemetry without JWT (uses shared `telemetry_dev` user).
