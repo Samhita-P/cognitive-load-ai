@@ -288,7 +288,9 @@ LOGGING = {
 }
 
 # Sentry Configuration
+# pyrefly: ignore [missing-import]
 import sentry_sdk
+# pyrefly: ignore [missing-import]
 from sentry_sdk.integrations.django import DjangoIntegration
 
 def sentry_before_send(event, hint):
