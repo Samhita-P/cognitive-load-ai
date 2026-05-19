@@ -7,6 +7,8 @@ TRAINING_FEATURE_KEYS = [
     "max_pause_ms",
     "avg_mouse_variance",
     "total_keystrokes",
+    "relative_idle_ratio",
+    "relative_activity_density",
 ]
 
 # Score hints for UI when using classifier-only outputs (no regression head).

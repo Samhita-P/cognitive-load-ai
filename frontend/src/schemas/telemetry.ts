@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const TelemetryBatchSchema = z.object({
   batch_id: z.string().uuid(),
+  sequence_number: z.number().int().nonnegative(),
+  schema_version: z.string(),
+  trace_id: z.string().uuid(),
   session_id: z.string().uuid(),
   timestamp_start: z.number().int().positive(),
   timestamp_end: z.number().int().positive(),

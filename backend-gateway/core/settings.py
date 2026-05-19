@@ -21,7 +21,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
     v = os.environ.get(name)
     if v is None:
         return default
-    return v.strip().lower() in ("1", "true", "yes", "on")
+    return v.strip().lower() in ("1", "true", "yes", "on", "t", "y")
+
+# Identify if we are in production
+IS_PRODUCTION = os.environ.get("DJANGO_ENV", "").lower() == "production" or os.environ.get("RENDER", "") == "true"
 
 
 # SECURITY WARNING: set DJANGO_SECRET_KEY in production.
@@ -30,7 +33,18 @@ SECRET_KEY = os.environ.get(
     "django-insecure-dev-only-uiz@t@az%7#u$cne*)1x24-c64j)44)%+6()h=$fvbag*d414_",
 )
 
-DEBUG = _env_bool("DJANGO_DEBUG", default=True)
+DEBUG = _env_bool("DJANGO_DEBUG", default=not IS_PRODUCTION)
+
+from django.core.exceptions import ImproperlyConfigured
+if IS_PRODUCTION:
+    if DEBUG:
+        raise ImproperlyConfigured("CRITICAL: DEBUG=True is not allowed in the production environment!")
+    if SECRET_KEY.startswith("django-insecure"):
+        raise ImproperlyConfigured("CRITICAL: Default django-insecure secret key is strictly forbidden in production!")
+    if not os.environ.get("DATABASE_URL"):
+        raise ImproperlyConfigured("CRITICAL: DATABASE_URL is strictly required in production!")
+    if not os.environ.get("REDIS_URL"):
+        raise ImproperlyConfigured("CRITICAL: REDIS_URL is strictly required in production!")
 
 _hosts_raw = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
 if _hosts_raw:
@@ -46,12 +60,30 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 _cors_raw = os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "").strip()
-if _cors_raw:
-    CORS_ALLOWED_ORIGINS = [
-        o.strip() for o in _cors_raw.split(",") if o.strip()
-    ]
-else:
-    CORS_ALLOW_ALL_ORIGINS = True  # Fallback for local development
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in _cors_raw.split(",") if o.strip()
+]
+# Removed CORS_ALLOW_ALL_ORIGINS fallback to enforce strict whitelist
+
+# HTTPS & Proxy Enforcement
+SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=IS_PRODUCTION)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Secure Headers
+if IS_PRODUCTION:
+    SECURE_HSTS_SECONDS = 31536000 # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "same-origin"
+
+# Secure Cookies
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # FastAPI cognitive inference (used by WebSocket consumer).
 ML_SERVICE_URL = os.environ.get(
@@ -65,6 +97,9 @@ ALLOW_DEV_INSECURE_TELEMETRY = (
     _env_bool("ALLOW_DEV_INSECURE_TELEMETRY", default=False) and DEBUG
 )
 
+WS_MAX_MESSAGES_PER_MIN = int(os.environ.get("WS_MAX_MESSAGES_PER_MIN", 30))
+WS_MAX_PAYLOAD_BYTES = int(os.environ.get("WS_MAX_PAYLOAD_BYTES", 51200)) # 50KB default
+
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -77,11 +112,14 @@ INSTALLED_APPS = [
     "channels",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
+    "django_prometheus",
     "gateway",
 ]
 
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -91,6 +129,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -112,6 +151,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "core.wsgi.application"
 ASGI_APPLICATION = "core.asgi.application"
+
+# Django Caching
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+    }
+}
 
 CHANNEL_LAYERS = {
     "default": {
@@ -151,6 +198,15 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle"
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10/min",
+        "user": "60/min",
+        "ws_ticket": "10/min",
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
@@ -164,8 +220,10 @@ SPECTACULAR_SETTINGS = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -200,3 +258,56 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Observability & Log Sanitization
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "sensitive_data_filter": {
+            "()": "core.log_filters.SensitiveDataFilter",
+        },
+    },
+    "formatters": {
+        "structured": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(levelname)s %(asctime)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["sensitive_data_filter"],
+            "formatter": "structured",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+    },
+}
+
+# Sentry Configuration
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+def sentry_before_send(event, hint):
+    # Scrub PII
+    if "request" in event and "data" in event["request"]:
+        # Scrub telemetry payloads
+        data = event["request"]["data"]
+        if isinstance(data, dict):
+            if "keyboard" in data:
+                data["keyboard"] = "[FILTERED]"
+            if "mouse" in data:
+                data["mouse"] = "[FILTERED]"
+    return event
+
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN", ""),
+    integrations=[DjangoIntegration()],
+    traces_sample_rate=1.0,
+    send_default_pii=False,
+    before_send=sentry_before_send,
+    environment=os.environ.get("DJANGO_ENV", "development"),
+)

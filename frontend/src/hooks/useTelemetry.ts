@@ -5,6 +5,7 @@ import { TelemetryAggregator } from "../services/telemetryAggregator";
 import { telemetrySocket } from "../services/websocket";
 import { useAuthStore } from "../store/useAuthStore";
 import { useCognitiveStore } from "../store/useCognitiveStore";
+import { usePrivacyStore } from "../store/usePrivacyStore";
 import { apiUrl } from "../config/env";
 
 export const useTelemetry = () => {
@@ -12,9 +13,20 @@ export const useTelemetry = () => {
   const token = useAuthStore((s) => s.token);
   const aggregatorRef = useRef<TelemetryAggregator | null>(null);
   const { setBaseline, baseline } = useCognitiveStore();
+  const telemetryConsent = usePrivacyStore((s) => s.telemetryConsent);
+  const privacyMode = usePrivacyStore((s) => s.privacyMode);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    
+    // Privacy Mode / Consent Enforcement
+    if (privacyMode || !telemetryConsent) {
+      if (aggregatorRef.current) {
+        aggregatorRef.current = null;
+      }
+      telemetrySocket.disconnect();
+      return;
+    }
 
     // Fetch baseline
     fetch(apiUrl("/api/analytics/baseline/"), {
@@ -71,7 +83,8 @@ export const useTelemetry = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(batchInterval);
       telemetrySocket.disconnect();
+      telemetrySocket.disconnect();
       aggregatorRef.current = null;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, telemetryConsent, privacyMode]);
 };

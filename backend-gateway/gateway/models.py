@@ -38,6 +38,53 @@ class CognitivePrediction(models.Model):
 class HumanFeedback(models.Model):
     session = models.ForeignKey(CognitiveSession, on_delete=models.CASCADE, related_name='feedbacks')
     prediction = models.ForeignKey(CognitivePrediction, on_delete=models.CASCADE, null=True, blank=True)
-    user_label = models.CharField(max_length=50)
+    
+    # Target Variables (Ordinal Likert 1-5)
+    focus_score = models.IntegerField(null=True, blank=True)
+    fatigue_score = models.IntegerField(null=True, blank=True)
+    workload_score = models.IntegerField(null=True, blank=True)
+    
+    # Label Quality
+    confidence_score = models.IntegerField(null=True, blank=True) # 1-5
+    
+    # Metadata for Label Context
+    label_source = models.CharField(max_length=50, default='self-report') # e.g. self-report, nasa-tlx
+    prompt_trigger_type = models.CharField(max_length=50, default='random') # e.g. random, anomaly, manual
+    
+    # Contamination Control
+    tab_switch_count = models.IntegerField(default=0)
+    prompt_response_delay_ms = models.IntegerField(null=True, blank=True)
+    visibility_state = models.CharField(max_length=50, default='visible')
+    
+    # Feature Linkage
     features_snapshot = models.JSONField(default=dict)
+    feature_schema_version = models.CharField(max_length=50, default='v1.0')
+    
     timestamp = models.DateTimeField(auto_now_add=True)
+
+class UserPrivacyProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='privacy_profile')
+    telemetry_consent = models.BooleanField(default=False)
+    privacy_mode = models.BooleanField(default=False)
+    consent_timestamp = models.DateTimeField(auto_now_add=True)
+    consent_version = models.CharField(max_length=50, default='1.0')
+    deletion_requested_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Privacy Profile for {self.user.username} (Consent: {self.telemetry_consent})"
+
+class PrivacyAuditLog(models.Model):
+    EVENT_CHOICES = [
+        ('CONSENT_GRANTED', 'Consent Granted'),
+        ('CONSENT_REVOKED', 'Consent Revoked'),
+        ('PRIVACY_MODE_ENABLED', 'Privacy Mode Enabled'),
+        ('PRIVACY_MODE_DISABLED', 'Privacy Mode Disabled'),
+        ('DELETION_REQUESTED', 'Deletion Requested'),
+        ('DELETION_COMPLETED', 'Deletion Completed'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='privacy_audit_logs')
+    event = models.CharField(max_length=50, choices=EVENT_CHOICES)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.event} at {self.timestamp}"

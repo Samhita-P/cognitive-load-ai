@@ -5,6 +5,7 @@ import type { ValidatedTelemetryBatch } from "../schemas/telemetry";
 export class TelemetryAggregator {
   private session_id: string;
   private batch_start_time: number;
+  private sequence_number: number = 0;
   
   // State accumulators
   private keystrokes: number = 0;
@@ -104,6 +105,9 @@ export class TelemetryAggregator {
 
     const rawBatch = {
       batch_id: uuidv4(),
+      sequence_number: ++this.sequence_number,
+      schema_version: "telemetry.v1",
+      trace_id: uuidv4(),
       session_id: this.session_id,
       timestamp_start: this.batch_start_time,
       timestamp_end: now,

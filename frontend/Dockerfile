@@ -1,23 +1,15 @@
-# Build Stage
-FROM node:20-alpine AS builder
-WORKDIR /app/frontend
-
-ARG VITE_API_BASE_URL=http://localhost:8000
-ARG VITE_GATEWAY_WS_URL=ws://localhost:8000/ws/telemetry/
-ARG VITE_ML_BASE_URL=http://localhost:8001
-
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-ENV VITE_GATEWAY_WS_URL=$VITE_GATEWAY_WS_URL
-ENV VITE_ML_BASE_URL=$VITE_ML_BASE_URL
-
-COPY frontend/package*.json ./
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
 RUN npm install
-COPY frontend/ .
-COPY shared/ ../shared/
+COPY . .
 RUN npm run build
 
-# Production Stage
 FROM nginx:alpine
-COPY --from=builder /app/frontend/dist /usr/share/nginx/html
+# Copy built static files
+COPY --from=build /app/dist /usr/share/nginx/html
+# Provide a default nginx configuration for client-side routing
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

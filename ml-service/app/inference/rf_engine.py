@@ -45,9 +45,13 @@ def infer_rf(features: dict) -> dict:
     if not classes:
         raise ValueError("Classes metadata is missing.")
 
-    row = [float(features.get(n) or 0.0) for n in names]
+    import numpy as np
+    row = np.array(
+        [[float(features.get(n) or 0.0) for n in names]],
+        dtype=np.float32
+    )
 
-    proba = clf.predict_proba([row])[0].tolist()
+    proba = clf.predict_proba(row)[0].tolist()
     pred_idx = int(proba.index(max(proba)))
     state = str(classes[pred_idx]) if pred_idx < len(classes) else "Unknown"
     

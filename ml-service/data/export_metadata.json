@@ -1,0 +1,9 @@
+{
+  "record_count": 200,
+  "export_timestamp": "2026-05-17T13:54:47.950033Z",
+  "feature_schema_version": "v1.1",
+  "source_db": "django_default",
+  "filters_applied": {
+    "min_date": "2024-01-01"
+  }
+}

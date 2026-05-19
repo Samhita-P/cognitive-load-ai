@@ -39,6 +39,9 @@ services:
       - ENV=production
       - GATEWAY_WS_URL=ws://backend-gateway:8000/ws/telemetry/
       - DEMO_GATEWAY_JWT=${DEMO_GATEWAY_JWT:-}
+      - MAX_CONCURRENT_INFERENCE=${MAX_CONCURRENT_INFERENCE:-50}
+      - MAX_THREADPOOL_WORKERS=${MAX_THREADPOOL_WORKERS:-100}
+      - INFERENCE_TIMEOUT_MS=${INFERENCE_TIMEOUT_MS:-400}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/metrics"]
       interval: 30s
@@ -61,6 +64,11 @@ services:
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,backend-gateway,[::1]
       - DJANGO_DEBUG=1
       - ALLOW_DEV_INSECURE_TELEMETRY=${ALLOW_DEV_INSECURE_TELEMETRY:-0}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       redis:
         condition: service_healthy
@@ -81,6 +89,11 @@ services:
       - "80:80"
     depends_on:
       - backend-gateway
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   redis_data:

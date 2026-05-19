@@ -1,0 +1,26 @@
+{
+  "title": "ML Resilience Plane",
+  "uid": "ml-resilience",
+  "panels": [
+    {
+      "title": "Inference Latency (p95)",
+      "type": "timeseries",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le))"}]
+    },
+    {
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "targets": [{"expr": "mlclient_circuit_breaker_state"}]
+    },
+    {
+      "title": "Degraded Responses (Fallback %)",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(mlclient_fallback_responses_total[1m])) / sum(rate(mlclient_requests_total[1m])) * 100"}]
+    },
+    {
+      "title": "Semaphore Saturation (Threadpool)",
+      "type": "timeseries",
+      "targets": [{"expr": "fastapi_active_threads"}]
+    }
+  ]
+}

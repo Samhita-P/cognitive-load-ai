@@ -1,0 +1,86 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: "Production Resilience Alerts"
+    folder: "Cognitive Load AI"
+    interval: "1m"
+    rules:
+      - uid: "alert_ml_breaker_open"
+        title: "ML Circuit Breaker OPEN"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'mlclient_circuit_breaker_state{state="open"} == 1'
+            datasourceUid: "prometheus"
+        for: "5m"
+        annotations:
+          summary: "ML Service Circuit Breaker has been OPEN for > 5 minutes."
+          description: "Gateway is actively shedding load to the ML Service and returning degraded responses."
+        labels:
+          severity: "critical"
+
+      - uid: "alert_ml_fallback_rate"
+        title: "High ML Fallback Rate"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'rate(mlclient_fallback_responses_total[5m]) / rate(mlclient_requests_total[5m]) > 0.10'
+            datasourceUid: "prometheus"
+        for: "2m"
+        annotations:
+          summary: "ML Fallback Rate exceeds 10%."
+          description: "Over 10% of real-time telemetry requests are receiving degraded predictions."
+        labels:
+          severity: "warning"
+
+      - uid: "alert_ws_disconnect_spike"
+        title: "WebSocket Disconnect Spike"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'rate(websocket_disconnects_total[1m]) > 50'
+            datasourceUid: "prometheus"
+        for: "1m"
+        annotations:
+          summary: "Abnormal spike in WebSocket disconnections."
+        labels:
+          severity: "warning"
+
+      - uid: "alert_ticket_failures"
+        title: "WebSocket Ticket Auth Failures"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'rate(websocket_ticket_failures_total[1m]) > 10'
+            datasourceUid: "prometheus"
+        for: "2m"
+        annotations:
+          summary: "High rate of WS ticket authentication failures (potential replay attack or Redis failure)."
+        labels:
+          severity: "critical"
+
+      - uid: "alert_redis_down"
+        title: "Redis Unavailable"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'redis_up == 0'
+            datasourceUid: "prometheus"
+        for: "1m"
+        annotations:
+          summary: "Redis Cache is down. WebSocket tickets cannot be authenticated."
+        labels:
+          severity: "critical"
+
+      - uid: "alert_ml_latency"
+        title: "ML Inference Latency High"
+        condition: "A"
+        data:
+          - refId: "A"
+            expr: 'histogram_quantile(0.95, rate(fastapi_requests_duration_seconds_bucket[5m])) > 1.5'
+            datasourceUid: "prometheus"
+        for: "2m"
+        annotations:
+          summary: "p95 Latency for ML inference is exceeding 1.5 seconds."
+        labels:
+          severity: "warning"

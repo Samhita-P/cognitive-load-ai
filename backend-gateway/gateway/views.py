@@ -7,6 +7,15 @@ from rest_framework.views import APIView
 
 from .models import CognitivePrediction, CognitiveSession, HumanFeedback
 from .serializers import HumanFeedbackCreateSerializer
+import secrets
+import json
+from django.core.cache import cache
+from rest_framework.throttling import UserRateThrottle
+from .ticket_store import WSTicketStore
+
+class WSTicketThrottle(UserRateThrottle):
+    scope = 'ws_ticket'
+    rate = '10/min'
 
 
 class UserSerializer(ModelSerializer):
@@ -24,6 +33,18 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = UserSerializer
 
+class WSTicketView(APIView):
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = [WSTicketThrottle]
+
+    def post(self, request):
+        ticket = secrets.token_urlsafe(32)
+        payload = {
+            "user_id": request.user.id,
+            "purpose": "ws_auth"
+        }
+        WSTicketStore.issue(ticket, payload, ttl=60)
+        return Response({"ticket": ticket}, status=status.HTTP_201_CREATED)
 
 class HumanFeedbackSubmitView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -43,6 +64,12 @@ class HumanFeedbackSubmitView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if not hasattr(request.user, 'privacy_profile') or not request.user.privacy_profile.telemetry_consent:
+            return Response(
+                {"detail": "Telemetry consent is required to submit feedback."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         data = ser.validated_data
         prediction = None
         pid = data.get("prediction_id")
@@ -59,8 +86,17 @@ class HumanFeedbackSubmitView(APIView):
         fb = HumanFeedback.objects.create(
             session=session,
             prediction=prediction,
-            user_label=data["human_label"],
+            focus_score=data.get("focus_score"),
+            fatigue_score=data.get("fatigue_score"),
+            workload_score=data.get("workload_score"),
+            confidence_score=data.get("confidence_score"),
+            label_source=data.get("label_source", "self-report"),
+            prompt_trigger_type=data.get("prompt_trigger_type", "random"),
+            tab_switch_count=data.get("tab_switch_count", 0),
+            prompt_response_delay_ms=data.get("prompt_response_delay_ms"),
+            visibility_state=data.get("visibility_state", "visible"),
             features_snapshot=data["features_snapshot"],
+            feature_schema_version=data.get("feature_schema_version", "v1.0")
         )
         return Response(
             {"status": "ok", "id": fb.id, "prediction_linked": prediction is not None},

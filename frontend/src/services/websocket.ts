@@ -2,7 +2,7 @@ import type { ValidatedTelemetryBatch } from "../schemas/telemetry";
 import { useCognitiveStore } from "../store/useCognitiveStore";
 import type { CognitiveStatePrediction } from "@shared/types";
 import { useAuthStore } from "../store/useAuthStore";
-import { GATEWAY_WS_URL } from "../config/env";
+import { GATEWAY_WS_URL, apiUrl } from "../config/env";
 
 export class TelemetrySocketManager {
   private socket: WebSocket | null = null;
@@ -16,15 +16,42 @@ export class TelemetrySocketManager {
     this.url = url;
   }
 
-  public connect() {
+  public async connect() {
     if (this.socket?.readyState === WebSocket.OPEN || this.isConnecting) {
       return;
     }
 
     this.isConnecting = true;
     const token = useAuthStore.getState().token;
+    
+    if (!token) {
+        this.isConnecting = false;
+        return;
+    }
+
+    let ticket: string | null = null;
+    try {
+      const res = await fetch(apiUrl("/auth/ws-ticket/"), {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch ticket: ${res.statusText}`);
+      }
+      const data = await res.json();
+      ticket = data.ticket;
+    } catch (error) {
+      console.error("[WebSocket] Ticket fetch failed", error);
+      this.isConnecting = false;
+      this.handleReconnect();
+      return;
+    }
+
     const sep = this.url.includes("?") ? "&" : "?";
-    const wsUrl = token ? `${this.url}${sep}token=${encodeURIComponent(token)}` : this.url;
+    const wsUrl = ticket ? `${this.url}${sep}ticket=${encodeURIComponent(ticket)}` : this.url;
     this.socket = new WebSocket(wsUrl);
 
     this.socket.onopen = () => {

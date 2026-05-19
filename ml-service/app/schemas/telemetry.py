@@ -2,18 +2,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class KeyboardTelemetry(BaseModel):
-    keystrokes: int = Field(ge=0)
-    backspaces: int = Field(ge=0)
-    longest_pause_ms: int = Field(ge=0)
+    keystrokes: int = Field(ge=0, le=5000)
+    backspaces: int = Field(ge=0, le=2000)
+    longest_pause_ms: int = Field(ge=0, le=86400000)
 
 class MouseTelemetry(BaseModel):
-    distance_px: float = Field(ge=0)
-    clicks: int = Field(ge=0)
-    variance_x: float = Field(ge=0)
-    variance_y: float = Field(ge=0)
+    distance_px: float = Field(ge=0, le=1000000.0)
+    clicks: int = Field(ge=0, le=5000)
+    variance_x: float = Field(ge=0, le=100000.0)
+    variance_y: float = Field(ge=0, le=100000.0)
 
 class SessionTelemetry(BaseModel):
-    idle_time_ms: int = Field(ge=0)
+    idle_time_ms: int = Field(ge=0, le=86400000) # Max 24 hours
     tab_hidden: bool
     user_baseline: Optional[dict] = None
 

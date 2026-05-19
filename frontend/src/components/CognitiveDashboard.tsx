@@ -2,6 +2,7 @@ import React from "react";
 import { useCognitiveStore } from "../store/useCognitiveStore";
 import { BrainCircuit, Activity, Zap, Info } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { PrivacyControls } from "./PrivacyControls";
 
 export const CognitiveDashboard: React.FC = () => {
   const { latestPrediction, timeline } = useCognitiveStore();
@@ -130,6 +131,11 @@ export const CognitiveDashboard: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Privacy Controls */}
+      <div className="mt-8">
+        <PrivacyControls />
       </div>
     </div>
   );

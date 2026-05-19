@@ -1,0 +1,26 @@
+{
+  "title": "Redis Infrastructure Plane",
+  "uid": "redis-infra",
+  "panels": [
+    {
+      "title": "Connected Clients",
+      "type": "stat",
+      "targets": [{"expr": "redis_connected_clients"}]
+    },
+    {
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "targets": [{"expr": "redis_memory_used_bytes"}]
+    },
+    {
+      "title": "Connection Failures",
+      "type": "timeseries",
+      "targets": [{"expr": "rate(redis_connections_received_total[1m]) - rate(redis_connected_clients[1m])"}]
+    },
+    {
+      "title": "Key Evictions (Rate Limit Drops)",
+      "type": "timeseries",
+      "targets": [{"expr": "rate(redis_evicted_keys_total[1m])"}]
+    }
+  ]
+}

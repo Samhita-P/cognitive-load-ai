@@ -2,6 +2,9 @@ export type EventType = "keyboard" | "mouse" | "session";
 
 export interface TelemetryBatch {
   batch_id: string;
+  sequence_number: number;
+  schema_version: string;
+  trace_id: string;
   session_id: string;
   timestamp_start: number;
   timestamp_end: number;

@@ -109,6 +109,19 @@ The system operates through multiple intelligence layers:
 *   Deploy all microservices and run system-wide optimizations.
 *   *Future Scope: Expand to Multimodal AI (webcam, eye tracking) and **Cognitive Trend Forecasting**.*
 
+## Phase 2: ML Maturity & Benchmark Pipeline (Current Active Phase)
+
+**Goal:** Transition from the heuristic MVP into rigorous supervised ML trained on multi-dimensional Likert scales (Focus, Fatigue, Workload). 
+
+**Implementation Checklist:**
+1. **Shared Feature Pipeline:** Update `generate_dataset.py` to produce a rigorous mock dataset that exactly matches the new `HumanFeedback` Likert scale fields, preventing training-serving skew.
+2. **Feature Extractor Alignment:** Ensure `TRAINING_FEATURE_KEYS` natively supports the new relational features calculated in the edge pipeline.
+3. **Training Baseline Models:** Create `train_benchmark.py` to train and evaluate:
+   - **Ordinal Regression Pipeline:** Predict discrete 1-5 scales using Ridge classifiers or Ordinal logic.
+   - **Multi-Output Regression:** Predict continuous outputs concurrently (Focus, Fatigue, Workload) using `RandomForestRegressor(MultiOutputRegressor)`.
+   - **Multi-Task Classification:** Predict classes directly via `RandomForestClassifier`.
+4. **Evaluation:** Compare Accuracy, RMSE, and F1 across all outputs. Select the highest-performing pipeline and serialize it for FastAPI usage.
+
 ## Verification Plan
 
 ### Automated Tests

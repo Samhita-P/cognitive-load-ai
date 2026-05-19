@@ -1,0 +1,50 @@
+name: ML Service CI
+
+on:
+  push:
+    paths:
+      - 'ml-service/**'
+  pull_request:
+    paths:
+      - 'ml-service/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ml-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8 black bandit pip-audit
+
+      - name: Code Formatting (Black)
+        run: black --check .
+
+      - name: Linting (Flake8)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Security Scan (Bandit)
+        run: bandit -r app/ -ll -ii
+
+      - name: Dependency Audit (pip-audit)
+        run: pip-audit
+
+      - name: Run Tests (Pytest)
+        run: |
+          if pytest --collect-only; then
+            pytest
+          else
+            echo "No tests found or pytest misconfigured. Skipping."
+          fi

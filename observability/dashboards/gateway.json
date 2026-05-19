@@ -1,0 +1,26 @@
+{
+  "title": "Gateway Telemetry Plane",
+  "uid": "gateway-telemetry",
+  "panels": [
+    {
+      "title": "WebSocket Connection Success Rate",
+      "type": "stat",
+      "targets": [{"expr": "sum(rate(websocket_connections_total[1m]))"}]
+    },
+    {
+      "title": "Auth Failures",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(websocket_ticket_failures_total[1m]))"}]
+    },
+    {
+      "title": "Active WebSocket Sessions",
+      "type": "stat",
+      "targets": [{"expr": "sum(websocket_active_connections)"}]
+    },
+    {
+      "title": "Disconnect Reasons",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(websocket_disconnects_total[1m])) by (reason)"}]
+    }
+  ]
+}

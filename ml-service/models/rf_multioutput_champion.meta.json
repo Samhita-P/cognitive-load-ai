@@ -1,0 +1,24 @@
+{
+  "model_name": "rf_multioutput_champion",
+  "model_version": "v3_multioutput_regressor",
+  "trained_at": "2026-05-17T13:36:28.978283Z",
+  "dataset_rows": 8713,
+  "evaluation": {
+    "mean_rmse": 0.8748
+  },
+  "features": [
+    "idle_ratio",
+    "activity_density",
+    "error_rate",
+    "max_pause_ms",
+    "avg_mouse_variance",
+    "total_keystrokes",
+    "relative_idle_ratio",
+    "relative_activity_density"
+  ],
+  "targets": [
+    "focus_score",
+    "fatigue_score",
+    "workload_score"
+  ]
+}
