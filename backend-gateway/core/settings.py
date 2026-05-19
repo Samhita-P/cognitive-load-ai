@@ -52,7 +52,9 @@ if _hosts_raw:
 elif DEBUG:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 else:
-    ALLOWED_HOSTS = []
+    ALLOWED_HOSTS = [
+        "cognitive-ai-gateway.onrender.com",
+    ]
 
 _csrf_raw = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
 CSRF_TRUSTED_ORIGINS = [
@@ -64,7 +66,17 @@ CORS_ALLOWED_ORIGINS = [
     o.strip() for o in _cors_raw.split(",") if o.strip()
 ]
 # Removed CORS_ALLOW_ALL_ORIGINS fallback to enforce strict whitelist
-
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 # HTTPS & Proxy Enforcement
 SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=IS_PRODUCTION)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
