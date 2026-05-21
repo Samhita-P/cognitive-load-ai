@@ -16,7 +16,7 @@ export const DemoControlPanel: React.FC = () => {
       await telemetrySocket.connect();
 
       const res = await fetch(
-        `${apiUrl("/api/demo/trigger/")}?scenario=${encodeURIComponent(scenario)}`,
+        `${apiUrl("/demo/trigger/")}?scenario=${encodeURIComponent(scenario)}`,
         {
           method: "POST",
           mode: "cors",

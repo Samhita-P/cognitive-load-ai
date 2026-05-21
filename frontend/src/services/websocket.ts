@@ -67,11 +67,13 @@ export class TelemetrySocketManager {
 
     const token = await this.ensureToken();
 
-    if (!token) {
-      this.isConnecting = false;
-      this.handleReconnect();
-      return;
-    }
+console.log("JWT TOKEN:", token);
+
+if (!token) {
+  this.isConnecting = false;
+  this.handleReconnect();
+  return;
+}
 
     let ticket: string | null = null;
 
