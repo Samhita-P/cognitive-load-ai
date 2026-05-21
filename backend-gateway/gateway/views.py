@@ -196,3 +196,36 @@ def trigger_demo(request):
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+    
+from django.contrib.auth import get_user_model
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+from .models import UserPrivacyProfile
+
+User = get_user_model()
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def demo_login(request):
+    user, _ = User.objects.get_or_create(
+        username="public_demo_user",
+        defaults={
+            "email": "demo@cognitiveai.app"
+        }
+    )
+
+    UserPrivacyProfile.objects.get_or_create(
+        user=user,
+        defaults={
+            "telemetry_consent": True
+        }
+    )
+
+    refresh = RefreshToken.for_user(user)
+
+    return Response({
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+    })

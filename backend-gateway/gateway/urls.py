@@ -9,6 +9,7 @@ from .views import (
     RegisterView,
     HumanFeedbackSubmitView,
     WSTicketView,
+    demo_login,
     trigger_demo
 )
 
@@ -38,4 +39,5 @@ urlpatterns = [
     path('privacy/telemetry/', PrivacyTelemetryDeleteView.as_view(), name='privacy_telemetry'),
 
     path('demo/trigger/', trigger_demo, name='demo_trigger'),
+    path("auth/demo-login/", demo_login),
 ]
