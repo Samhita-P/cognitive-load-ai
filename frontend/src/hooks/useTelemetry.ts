@@ -9,9 +9,7 @@ import { usePrivacyStore } from "../store/usePrivacyStore";
 import { apiUrl } from "../config/env";
 
 export const useTelemetry = () => {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const token = useAuthStore((s) => s.token);
-
   const aggregatorRef = useRef<TelemetryAggregator | null>(null);
 
   const { setBaseline, baseline } = useCognitiveStore();
@@ -20,47 +18,40 @@ export const useTelemetry = () => {
   const privacyMode = usePrivacyStore((s) => s.privacyMode);
 
   useEffect(() => {
-    // Privacy enforcement
     if (privacyMode || !telemetryConsent) {
-      aggregatorRef.current = null;
       telemetrySocket.disconnect();
+      aggregatorRef.current = null;
       return;
     }
 
-    // Demo mode support
-    if (!isAuthenticated && !token) {
-      console.log("[Telemetry] Starting in demo bootstrap mode");
-    }
+    const fetchBaseline = async () => {
+      try {
+        if (token) {
+          const res = await fetch(apiUrl("/api/analytics/baseline/"), {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-    // Fetch baseline only for authenticated users
-    if (token) {
-      fetch(apiUrl("/api/analytics/baseline/"), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error(`Baseline fetch failed: ${res.status}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.baseline) {
+              setBaseline(data.baseline);
+            }
           }
-          return res.json();
-        })
-        .then((data) => {
-          if (data?.baseline) {
-            setBaseline(data.baseline);
-          }
-        })
-        .catch((err) => {
-          console.error("[Telemetry] Failed to fetch baseline:", err);
-        });
-    }
+        }
+      } catch (err) {
+        console.error("Baseline fetch failed:", err);
+      }
+    };
+
+    fetchBaseline();
 
     const sessionId = uuidv4();
     const aggregator = new TelemetryAggregator(sessionId, baseline);
-
     aggregatorRef.current = aggregator;
 
-    // Start authenticated websocket flow
+    console.log("[Telemetry] Starting websocket...");
     telemetrySocket.connect();
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -103,23 +94,11 @@ export const useTelemetry = () => {
       window.removeEventListener("mousemove", handleMouseMove);
       handleMouseMove.cancel();
       window.removeEventListener("click", handleClick);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange
-      );
-
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(batchInterval);
 
       telemetrySocket.disconnect();
-
       aggregatorRef.current = null;
     };
-  }, [
-    token,
-    isAuthenticated,
-    telemetryConsent,
-    privacyMode,
-    baseline,
-    setBaseline,
-  ]);
+  }, [token, telemetryConsent, privacyMode]);
 };
