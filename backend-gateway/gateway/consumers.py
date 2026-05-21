@@ -95,82 +95,125 @@ def save_telemetry_and_prediction(session, payload, prediction=None, batch_id=No
             return obj.pk
         return None
 
-
 class TelemetryConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         query_string = self.scope["query_string"].decode()
+
+        logger.warning("RAW QUERY STRING: %s", query_string)
+
         query_params = parse_qs(query_string)
         ticket = query_params.get("ticket", [None])[0]
 
+        logger.warning("PARSED TICKET: %s", ticket)
+
         user = None
+
         if ticket:
             user = await get_user_from_ticket(ticket)
+
             if isinstance(user, AnonymousUser) or user is None:
+                logger.warning("INVALID TICKET")
                 await self.close()
                 return
+
         elif getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False):
             user = await get_dev_bypass_user()
+
             logger.warning(
-                "WebSocket telemetry connected without ticket (ALLOW_DEV_INSECURE_TELEMETRY). "
-                "Disable this flag outside local development."
+                "WebSocket telemetry connected without ticket "
+                "(ALLOW_DEV_INSECURE_TELEMETRY)"
             )
+
         else:
             logger.warning("WebSocket rejected: no ticket and dev bypass disabled")
             await self.close(code=4001)
             return
 
         self.user = user
-        
+
         if not isinstance(self.user, AnonymousUser):
-            # Check privacy profile consent
             profile_consent = await sync_to_async(
-                lambda u: getattr(u, 'privacy_profile', None) and u.privacy_profile.telemetry_consent
+                lambda u: getattr(u, "privacy_profile", None)
+                and u.privacy_profile.telemetry_consent
             )(self.user)
-            
-            if not profile_consent and not getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False):
-                logger.warning("User %s rejected WS connection due to lack of telemetry consent.", self.user.username)
+
+            if (
+                not profile_consent
+                and not getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False)
+            ):
+                logger.warning(
+                    "User %s rejected WS connection due to lack of telemetry consent",
+                    self.user.username,
+                )
                 await self.close(code=4003)
                 return
 
             self.user_group_name = f"user_{self.user.id}"
-            await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+
+            await self.channel_layer.group_add(
+                self.user_group_name,
+                self.channel_name,
+            )
 
         self.session = await get_or_create_active_session(self.user)
         self.connection_id = str(uuid.uuid4())
-        
-        # Connection Cap (Redis SET logic)
-        self.max_connections = getattr(settings, "WS_MAX_CONNECTIONS_PER_USER", 3)
+
+        self.max_connections = getattr(
+            settings,
+            "WS_MAX_CONNECTIONS_PER_USER",
+            3,
+        )
+
         try:
-            redis_url = settings.CACHES["default"].get("LOCATION", "redis://127.0.0.1:6379/0")
+            redis_url = settings.CACHES["default"].get(
+                "LOCATION",
+                "redis://127.0.0.1:6379/0",
+            )
+
             client = redis.from_url(redis_url)
+
             conn_key = f"ws_connections:{self.user.id}"
-            
+
             client.sadd(conn_key, self.connection_id)
-            client.expire(conn_key, 3600) # Periodic TTL cleanup for stale leaks
-            
+            client.expire(conn_key, 3600)
+
             if client.scard(conn_key) > self.max_connections:
                 client.srem(conn_key, self.connection_id)
+
                 logger.warning(
-                    "[conn_id=%s] Max concurrent connections exceeded for %s.", 
-                    self.connection_id, self.user.username
+                    "[conn_id=%s] Max concurrent connections exceeded",
+                    self.connection_id,
                 )
+
                 await self.close(code=1008)
                 return
+
         except Exception as e:
             logger.error("Redis connection tracking failed: %s", e)
-            await self.close(code=1011) # Fail closed for security
+            await self.close(code=1011)
             return
 
-        # Throttling config
-        self.max_messages = getattr(settings, "WS_MAX_MESSAGES_PER_MIN", 30)
-        self.message_times = collections.deque(maxlen=self.max_messages)
-        
+        self.max_messages = getattr(
+            settings,
+            "WS_MAX_MESSAGES_PER_MIN",
+            30,
+        )
+
+        self.message_times = collections.deque(
+            maxlen=self.max_messages
+        )
+
         self.last_sequence_number = -1
         self.inference_semaphore = asyncio.Semaphore(1)
-        
-        await self.accept()
-        logger.info("[conn_id=%s] WebSocket client connected: %s", self.connection_id, self.user.username)
 
+        await self.accept()
+
+        logger.info(
+            "[conn_id=%s] WebSocket connected: %s",
+            self.connection_id,
+            self.user.username,
+        )
+        
     async def disconnect(self, close_code):
         logger.info(
             "[conn_id=%s] WebSocket disconnected with code: %s",
