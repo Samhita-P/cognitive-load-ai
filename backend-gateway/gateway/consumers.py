@@ -115,7 +115,8 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
                 "Disable this flag outside local development."
             )
         else:
-            await self.close()
+            logger.warning("WebSocket rejected: no ticket and dev bypass disabled")
+            await self.close(code=4001)
             return
 
         self.user = user
@@ -171,24 +172,45 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
         logger.info("[conn_id=%s] WebSocket client connected: %s", self.connection_id, self.user.username)
 
     async def disconnect(self, close_code):
-        logger.info("[conn_id=%s] WebSocket disconnected with code: %s", getattr(self, 'connection_id', 'unknown'), close_code)
-            
-        if hasattr(self, 'user') and not isinstance(self.user, AnonymousUser):
-            if hasattr(self, 'user_group_name'):
-                await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
-            
-        if hasattr(self, 'user') and hasattr(self, 'connection_id'):
+        logger.info(
+            "[conn_id=%s] WebSocket disconnected with code: %s",
+            getattr(self, "connection_id", "unknown"),
+            close_code,
+        )
+
+        if hasattr(self, "user") and not isinstance(self.user, AnonymousUser):
+            if hasattr(self, "user_group_name"):
+                await self.channel_layer.group_discard(
+                    self.user_group_name,
+                    self.channel_name,
+                )
+
+        if hasattr(self, "user") and hasattr(self, "connection_id"):
             try:
-                redis_url = settings.CACHES["default"].get("LOCATION", "redis://127.0.0.1:6379/0")
+                redis_url = settings.CACHES["default"].get(
+                    "LOCATION",
+                    "redis://127.0.0.1:6379/0",
+                )
                 client = redis.from_url(redis_url)
-                client.srem(f"ws_connections:{self.user.id}", self.connection_id)
+                client.srem(
+                    f"ws_connections:{self.user.id}",
+                    self.connection_id,
+                )
             except Exception as e:
                 logger.error("Redis connection untracking failed: %s", e)
-        try:
-            from .session_manager import finalize_session
-            await sync_to_async(finalize_session)(self.session.id, reason="normal_disconnect")
-        except Exception as e:
-            logger.error("Failed to finalize session on disconnect: %s", e)
+
+        if hasattr(self, "session") and self.session:
+            try:
+                from .session_manager import finalize_session
+                await sync_to_async(finalize_session)(
+                    self.session.id,
+                    reason="normal_disconnect",
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to finalize session on disconnect: %s",
+                    e,
+                )
 
     async def receive(self, text_data):
         # 1. Privacy Revocation Check (Defense in Depth)
