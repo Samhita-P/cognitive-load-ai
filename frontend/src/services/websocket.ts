@@ -45,6 +45,8 @@ export class TelemetrySocketManager {
 
       useAuthStore.getState().setToken(data.access);
 
+      console.log("[WebSocket] Demo token acquired");
+
       return data.access;
     } catch (error) {
       console.error("[WebSocket] Failed to get demo token:", error);
@@ -53,7 +55,11 @@ export class TelemetrySocketManager {
   }
 
   public async connect() {
-    if (this.socket?.readyState === WebSocket.OPEN || this.isConnecting) {
+    if (
+      this.socket?.readyState === WebSocket.OPEN ||
+      this.socket?.readyState === WebSocket.CONNECTING ||
+      this.isConnecting
+    ) {
       return;
     }
 
@@ -70,6 +76,8 @@ export class TelemetrySocketManager {
     let ticket: string | null = null;
 
     try {
+      console.log("[WebSocket] Requesting websocket ticket...");
+
       const res = await fetch(apiUrl("/auth/ws-ticket/"), {
         method: "POST",
         headers: {
@@ -88,6 +96,8 @@ export class TelemetrySocketManager {
       if (!ticket) {
         throw new Error("No websocket ticket returned");
       }
+
+      console.log("[WebSocket] Ticket received:", ticket);
     } catch (error) {
       console.error("[WebSocket] Ticket fetch failed:", error);
       this.isConnecting = false;
@@ -98,10 +108,22 @@ export class TelemetrySocketManager {
     const sep = this.url.includes("?") ? "&" : "?";
     const wsUrl = `${this.url}${sep}ticket=${encodeURIComponent(ticket)}`;
 
-    this.socket = new WebSocket(wsUrl);
+    // DEBUG LOGS
+    console.log("WS BASE URL:", this.url);
+    console.log("WS TICKET:", ticket);
+    console.log("FINAL WS URL:", wsUrl);
+
+    try {
+      this.socket = new WebSocket(wsUrl);
+    } catch (error) {
+      console.error("[WebSocket] Failed to create socket:", error);
+      this.isConnecting = false;
+      this.handleReconnect();
+      return;
+    }
 
     this.socket.onopen = () => {
-      console.log("[WebSocket] Connected");
+      console.log("[WebSocket] Connected successfully");
       this.isConnecting = false;
       this.reconnectAttempts = 0;
       useCognitiveStore.getState().setSocketStatus("connected");
@@ -109,21 +131,27 @@ export class TelemetrySocketManager {
     };
 
     this.socket.onclose = (event) => {
-      console.log(`[WebSocket] Disconnected: ${event.code}`);
+      console.warn(`[WebSocket] Disconnected: ${event.code}`);
+
       this.isConnecting = false;
       this.socket = null;
+
       useCognitiveStore.getState().setSocketStatus("disconnected");
-      this.handleReconnect();
+
+      if (event.code !== 1000) {
+        this.handleReconnect();
+      }
     };
 
     this.socket.onerror = (error) => {
       console.error("[WebSocket] Error:", error);
-      this.socket?.close();
     };
 
     this.socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+
+        console.log("[WebSocket] Message received:", data);
 
         if (data.type === "prediction") {
           const prediction = data.payload as CognitiveStatePrediction;
@@ -139,16 +167,20 @@ export class TelemetrySocketManager {
 
   public disconnect() {
     if (this.socket) {
+      console.log("[WebSocket] Manual disconnect");
       this.socket.close(1000, "Client disconnect");
       this.socket = null;
     }
+
+    this.isConnecting = false;
   }
 
   public sendBatch(batch: ValidatedTelemetryBatch) {
     if (this.socket?.readyState === WebSocket.OPEN) {
+      console.log("[WebSocket] Sending batch:", batch.batch_id);
       this.socket.send(JSON.stringify(batch));
     } else {
-      console.warn("[WebSocket] Offline. Queuing:", batch.batch_id);
+      console.warn("[WebSocket] Offline. Queuing batch:", batch.batch_id);
       this.queue.push(batch);
       this.connect();
     }
@@ -157,6 +189,7 @@ export class TelemetrySocketManager {
   private handleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("[WebSocket] Max reconnect attempts reached");
+      useCognitiveStore.getState().setSocketStatus("disconnected");
       return;
     }
 
@@ -167,7 +200,9 @@ export class TelemetrySocketManager {
       10000
     );
 
-    console.log(`[WebSocket] Reconnecting in ${timeout}ms...`);
+    console.log(
+      `[WebSocket] Reconnecting in ${timeout}ms (attempt ${this.reconnectAttempts})`
+    );
 
     useCognitiveStore.getState().setSocketStatus("reconnecting");
 
