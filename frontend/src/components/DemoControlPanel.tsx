@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
 import { apiUrl } from "../config/env";
+import { telemetrySocket } from "../services/websocket";
 
 export const DemoControlPanel: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
@@ -11,6 +12,9 @@ export const DemoControlPanel: React.FC = () => {
     setActiveScenario(scenario);
 
     try {
+      // CONNECT WEBSOCKET FIRST
+      await telemetrySocket.connect();
+
       const res = await fetch(
         `${apiUrl("/api/demo/trigger/")}?scenario=${encodeURIComponent(scenario)}`,
         {
@@ -54,14 +58,14 @@ export const DemoControlPanel: React.FC = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        {/* Deep Focus */}
         <button
           disabled={isRunning}
           onClick={() => runScenario("Deep Focus")}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full
-            ${activeScenario === "Deep Focus"
-              ? "bg-emerald-50 border border-emerald-100 text-emerald-800"
-              : "bg-gray-50 border border-transparent text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+            ${
+              activeScenario === "Deep Focus"
+                ? "bg-emerald-50 border border-emerald-100 text-emerald-800"
+                : "bg-gray-50 border border-transparent text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
             }`}
         >
           {activeScenario === "Deep Focus" ? (
@@ -72,14 +76,14 @@ export const DemoControlPanel: React.FC = () => {
           Deep Focus
         </button>
 
-        {/* Severe Fatigue */}
         <button
           disabled={isRunning}
           onClick={() => runScenario("Severe Fatigue")}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full
-            ${activeScenario === "Severe Fatigue"
-              ? "bg-rose-50 border border-rose-100 text-rose-800"
-              : "bg-gray-50 border border-transparent text-gray-600 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+            ${
+              activeScenario === "Severe Fatigue"
+                ? "bg-rose-50 border border-rose-100 text-rose-800"
+                : "bg-gray-50 border border-transparent text-gray-600 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
             }`}
         >
           {activeScenario === "Severe Fatigue" ? (
@@ -90,14 +94,14 @@ export const DemoControlPanel: React.FC = () => {
           Fatigue Spike
         </button>
 
-        {/* Task Switching */}
         <button
           disabled={isRunning}
           onClick={() => runScenario("Chaotic Task Switching")}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full
-            ${activeScenario === "Chaotic Task Switching"
-              ? "bg-amber-50 border border-amber-100 text-amber-800"
-              : "bg-gray-50 border border-transparent text-gray-600 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
+            ${
+              activeScenario === "Chaotic Task Switching"
+                ? "bg-amber-50 border border-amber-100 text-amber-800"
+                : "bg-gray-50 border border-transparent text-gray-600 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
             }`}
         >
           {activeScenario === "Chaotic Task Switching" ? (
