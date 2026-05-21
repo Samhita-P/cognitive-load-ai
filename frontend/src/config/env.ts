@@ -10,7 +10,7 @@ function trimTrailingSlashes(url: string): string {
 /* Django Gateway (auth + websocket + API proxy) */
 export const API_BASE_URL = trimTrailingSlashes(
   import.meta.env.VITE_API_BASE_URL ??
-  "https://cognitive-ai-gateway.onrender.com"
+  "https://cognitive-ai-gateway.onrender.com/api"
 );
 
 /* WebSocket connection */
