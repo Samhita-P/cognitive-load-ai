@@ -94,43 +94,55 @@ def save_telemetry_and_prediction(session, payload, prediction=None, batch_id=No
             )
             return obj.pk
         return None
-
 class TelemetryConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        query_string = self.scope["query_string"].decode()
+        query_string = self.scope.get("query_string", b"").decode(
+            "utf-8",
+            errors="ignore",
+        )
 
         logger.warning("RAW QUERY STRING: %s", query_string)
 
-        query_params = parse_qs(query_string)
+        query_params = parse_qs(
+            query_string,
+            keep_blank_values=True,
+        )
+
         ticket = query_params.get("ticket", [None])[0]
 
         logger.warning("PARSED TICKET: %s", ticket)
 
         user = None
 
-        if ticket:
+        # ---------------- TICKET AUTH ----------------
+        if not ticket or ticket in ("", "undefined", "null"):
+            if getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False):
+                user = await get_dev_bypass_user()
+
+                logger.warning(
+                    "WebSocket telemetry connected without ticket "
+                    "(ALLOW_DEV_INSECURE_TELEMETRY)"
+                )
+            else:
+                logger.warning(
+                    "WebSocket rejected: missing or invalid ticket"
+                )
+                await self.close(code=4001)
+                return
+
+        else:
             user = await get_user_from_ticket(ticket)
 
             if isinstance(user, AnonymousUser) or user is None:
-                logger.warning("INVALID TICKET")
-                await self.close()
+                logger.warning(
+                    "WebSocket rejected: invalid/expired ticket"
+                )
+                await self.close(code=4003)
                 return
-
-        elif getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False):
-            user = await get_dev_bypass_user()
-
-            logger.warning(
-                "WebSocket telemetry connected without ticket "
-                "(ALLOW_DEV_INSECURE_TELEMETRY)"
-            )
-
-        else:
-            logger.warning("WebSocket rejected: no ticket and dev bypass disabled")
-            await self.close(code=4001)
-            return
 
         self.user = user
 
+        # ---------------- PRIVACY CONSENT ----------------
         if not isinstance(self.user, AnonymousUser):
             profile_consent = await sync_to_async(
                 lambda u: getattr(u, "privacy_profile", None)
@@ -139,7 +151,11 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
 
             if (
                 not profile_consent
-                and not getattr(settings, "ALLOW_DEV_INSECURE_TELEMETRY", False)
+                and not getattr(
+                    settings,
+                    "ALLOW_DEV_INSECURE_TELEMETRY",
+                    False,
+                )
             ):
                 logger.warning(
                     "User %s rejected WS connection due to lack of telemetry consent",
@@ -155,9 +171,11 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
                 self.channel_name,
             )
 
+        # ---------------- SESSION ----------------
         self.session = await get_or_create_active_session(self.user)
         self.connection_id = str(uuid.uuid4())
 
+        # ---------------- CONNECTION LIMIT ----------------
         self.max_connections = getattr(
             settings,
             "WS_MAX_CONNECTIONS_PER_USER",
@@ -193,6 +211,7 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
             await self.close(code=1011)
             return
 
+        # ---------------- RATE LIMIT SETUP ----------------
         self.max_messages = getattr(
             settings,
             "WS_MAX_MESSAGES_PER_MIN",
@@ -206,6 +225,7 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
         self.last_sequence_number = -1
         self.inference_semaphore = asyncio.Semaphore(1)
 
+        # ---------------- ACCEPT ----------------
         await self.accept()
 
         logger.info(
@@ -213,7 +233,7 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
             self.connection_id,
             self.user.username,
         )
-        
+
     async def disconnect(self, close_code):
         logger.info(
             "[conn_id=%s] WebSocket disconnected with code: %s",
