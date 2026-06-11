@@ -218,22 +218,6 @@ Provides:
 
 ---
 
-## 📸 Screenshots
-
-### Analytics Dashboard
-
-(Add screenshot here)
-
-### Workload Classification Results
-
-(Add screenshot here)
-
-### Performance Trend Visualization
-
-(Add screenshot here)
-
----
-
 ## 👩‍💻 Author
 
 **Samhita Prashanth**
